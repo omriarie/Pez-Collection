@@ -1,0 +1,6 @@
+sqlite3
+pandas
+streamlit
+copy
+PIL
+base64
