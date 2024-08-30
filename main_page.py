@@ -59,9 +59,16 @@ def fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_
 def fetch_distinct_values(column_name):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(f"SELECT DISTINCT {column_name} FROM pez_collection")
-    values = [row[column_name] for row in cursor.fetchall()]
-    conn.close()
+    try:
+        print(f"Fetching distinct values for column: {column_name}")
+        cursor.execute(f"SELECT DISTINCT {column_name} FROM pez_collection")
+        values = [row[column_name] for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        values = []
+    finally:
+        conn.close()
+
     return values
 
 # Function to delete a PEZ item from the database
