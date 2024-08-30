@@ -7,13 +7,11 @@ import base64
 
 items_per_page = 10
 
-
 # Function to connect to the SQLite database
 def get_db_connection():
     conn = sqlite3.connect('pez_collection.db')
     conn.row_factory = sqlite3.Row  # Allows accessing rows as dictionaries
     return conn
-
 
 # Function to fetch PEZ items with filters
 def fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_color, offset, limit):
@@ -53,7 +51,6 @@ def fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_
     conn.close()
     return rows
 
-
 # Function to fetch distinct values for filters
 def fetch_distinct_values(column_name):
     conn = get_db_connection()
@@ -63,7 +60,7 @@ def fetch_distinct_values(column_name):
     conn.close()
     return values
 
-
+# Function to delete a PEZ item from the database
 def delete_pez_item(pez_id):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -107,7 +104,6 @@ def fetch_filtered_pez_count(full_name, series, year, country, patent, leg, leg_
     conn.close()
     return total_count
 
-
 # Function to display images properly in a DataFrame
 def image_to_base64(img_data, max_width=150):
     img = Image.open(io.BytesIO(img_data))
@@ -121,20 +117,14 @@ def image_to_base64(img_data, max_width=150):
     img_base64 = base64.b64encode(buffered.getvalue()).decode()
     return f'<img src="data:image/png;base64,{img_base64}" style="width:{new_width}px;height:auto;"/>'
 
-
-# Function to prepare DataFrame from PEZ items with delete buttons for admins
-def prepare_pez_dataframe(pez_items, is_admin):
+# Function to prepare DataFrame from PEZ items
+def prepare_pez_dataframe(pez_items):
     data = []
     for item in pez_items:
         if item['image']:
             img_html = image_to_base64(item['image'])
         else:
             img_html = "No image available."
-
-        delete_button = ''
-        if is_admin:
-            # Add delete button as HTML in the DataFrame for each item
-            delete_button = f'<button onclick="window.location.href=\'/?delete_id={item["id"]}\'" style="color: red; cursor: pointer;">X</button>'
 
         data.append({
             "Image": img_html,
@@ -145,14 +135,11 @@ def prepare_pez_dataframe(pez_items, is_admin):
             "Country of Manufacture": item['country_of_manufacture'],
             "Patent": item['patent'],
             "Leg": item['leg'],
-            "Leg Color": item['leg_color'] if item['leg'] in ["with", "thin"] else "N/A",
-            "Delete": delete_button if is_admin else ''  # Only show delete button for admins
+            "Leg Color": item['leg_color'] if item['leg'] in ["with", "thin"] else "N/A"
         })
 
-    # Convert list of dictionaries to a DataFrame
     df = pd.DataFrame(data)
     return df
-
 
 # Function to handle pagination controls and display
 def display_pagination_controls(total_pages):
@@ -168,71 +155,16 @@ def display_pagination_controls(total_pages):
             st.session_state.current_page_main_number += 1
             st.experimental_rerun()
 
-
 # Main page function to display all PEZ items in a table
 def main_page():
     st.title("PEZ Collection")
+
 
     # Display the current user's role
     if st.session_state.get('is_admin', False):
         st.markdown("### **Status:** Admin")
     else:
         st.markdown("### **Status:** Viewer")
-
-    # Initialize session state for pagination
-    if 'current_page_main_number' not in st.session_state:
-        st.session_state.current_page_main_number = 0
-
-    # Ensure current_page_main_number is an integer
-    if not isinstance(st.session_state.current_page_main_number, int):
-        st.session_state.current_page_main_number = 0
-
-    # Check for delete action in query parameters
-    query_params = st.experimental_get_query_params()
-    if 'delete_id' in query_params:
-        delete_id = query_params['delete_id'][0]
-        if st.session_state.get(f'confirm_delete_{delete_id}', None) is None:
-            st.session_state[f'confirm_delete_{delete_id}'] = st.radio(
-                f"Are you sure you want to delete this item?",
-                ('No', 'Yes'), key=f"confirm_{delete_id}"
-            )
-        elif st.session_state[f'confirm_delete_{delete_id}'] == 'Yes':
-            delete_pez_item(delete_id)
-            st.success(f"PEZ item with ID {delete_id} deleted successfully!")
-            # Remove delete_id from query params and rerun
-            st.experimental_set_query_params()
-            st.experimental_rerun()
-        elif st.session_state[f'confirm_delete_{delete_id}'] == 'No':
-            st.experimental_set_query_params()
-
-    # Add filters and search options
-    st.sidebar.header("Filter and Search Options")
-    full_name = st.sidebar.text_input("Search by Full Name")
-    series = st.sidebar.selectbox("Filter by Series", [""] + fetch_distinct_values("series"))
-    year = st.sidebar.selectbox("Filter by Year of Manufacture", [""] + fetch_distinct_values("year_of_manufacture"))
-    country = st.sidebar.selectbox("Filter by Country of Manufacture", [""] + fetch_distinct_values("country_of_manufacture"))
-    patent = st.sidebar.selectbox("Filter by Patent", [""] + fetch_distinct_values("patent"))
-    leg = st.sidebar.selectbox("Filter by Leg", [""] + fetch_distinct_values("leg"))
-    leg_color = st.sidebar.selectbox("Filter by Leg Color", [""] + fetch_distinct_values("leg_color"))
-
-    # Fetch filtered item count and calculate pagination
-    total_items = fetch_filtered_pez_count(full_name, series, year, country, patent, leg, leg_color)
-    total_pages = (total_items - 1) // items_per_page + 1
-    start_idx = st.session_state.current_page_main_number * items_per_page
-
-    # Fetch and prepare filtered PEZ items for display
-    pez_items = fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_color, start_idx, items_per_page)
-    if pez_items:
-        df = prepare_pez_dataframe(pez_items, st.session_state.get('is_admin', False))
-        df.index = df.index + 1 + (st.session_state.current_page_main_number * items_per_page)
-
-        # Display DataFrame with images using st.markdown
-        st.markdown(df.to_html(escape=False, index=True), unsafe_allow_html=True)
-
-        # Display pagination controls
-        display_pagination_controls(total_pages)
-    else:
-        st.write("No PEZ items found in the collection.")
 
     # Admin-specific features
     if st.session_state.get('is_admin', False):
@@ -256,6 +188,42 @@ def main_page():
             st.session_state.current_page = "login"
             st.experimental_rerun()
 
+    # Initialize session state for pagination
+    if 'current_page_main_number' not in st.session_state:
+        st.session_state.current_page_main_number = 0
+
+    # Ensure current_page_main_number is an integer
+    if not isinstance(st.session_state.current_page_main_number, int):
+        st.session_state.current_page_main_number = 0
+
+    # Add filters and search options
+    st.sidebar.header("Filter and Search Options")
+    full_name = st.sidebar.text_input("Search by Full Name")
+    series = st.sidebar.selectbox("Filter by Series", [""] + fetch_distinct_values("series"))
+    year = st.sidebar.selectbox("Filter by Year of Manufacture", [""] + fetch_distinct_values("year_of_manufacture"))
+    country = st.sidebar.selectbox("Filter by Country of Manufacture", [""] + fetch_distinct_values("country_of_manufacture"))
+    patent = st.sidebar.selectbox("Filter by Patent", [""] + fetch_distinct_values("patent"))
+    leg = st.sidebar.selectbox("Filter by Leg", [""] + fetch_distinct_values("leg"))
+    leg_color = st.sidebar.selectbox("Filter by Leg Color", [""] + fetch_distinct_values("leg_color"))
+
+    # Fetch filtered item count and calculate pagination
+    total_items = fetch_filtered_pez_count(full_name, series, year, country, patent, leg, leg_color)
+    total_pages = (total_items - 1) // items_per_page + 1
+    start_idx = st.session_state.current_page_main_number * items_per_page
+
+    # Fetch and prepare filtered PEZ items for display
+    pez_items = fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_color, start_idx, items_per_page)
+    if pez_items:
+        df = prepare_pez_dataframe(pez_items)
+        df.index = df.index + 1 + (st.session_state.current_page_main_number * items_per_page)
+
+        # Display DataFrame with images using st.markdown
+        st.markdown(df.to_html(escape=False, index=True), unsafe_allow_html=True)
+
+        # Display pagination controls
+        display_pagination_controls(total_pages)
+    else:
+        st.write("No PEZ items found in the collection.")
 
 if __name__ == "__main__":
     main_page()
