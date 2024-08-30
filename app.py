@@ -11,6 +11,8 @@ if 'current_page' not in st.session_state:
     st.session_state.current_page = "main"
 if 'is_admin' not in st.session_state:
     st.session_state.is_admin = False
+if 'current_page_main_number' not in st.session_state:
+        st.session_state.current_page_main_number = 0
 
 # Display the current page based on session state
 if st.session_state.current_page == "main":

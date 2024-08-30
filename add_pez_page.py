@@ -15,18 +15,28 @@ def get_db_connection():
 def generate_next_id():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT MAX(id) FROM pez_collection")
-    max_id = cursor.fetchone()[0]
 
-    if max_id:
-        # Strip prefix and convert to integer, then increment
-        next_id = int(max_id.replace("PEZ", "")) + 1
-        new_id = f"PEZ{str(next_id).zfill(4)}"  # Format as PEZ0001, PEZ0002, etc.
-    else:
-        new_id = "PEZ0001"  # Start with PEZ0001 if the table is empty
+    # Fetch the last used ID
+    cursor.execute("SELECT last_id FROM id_tracker")
+    last_id = cursor.fetchone()[0]
+
+    # Debugging: Print the current last_id
+    print(f"Current last_id in database: {last_id}")
+
+    # Increment the last ID to generate a new PEZ ID
+    next_id = last_id + 1
+    new_id = f"PEZ{str(next_id).zfill(4)}"  # Format as PEZ0001, PEZ0002, etc.
+
+    # Debugging: Print the next_id to be saved
+    print(f"Next ID to be used: {next_id}")
+
+    # Update the last_id in the database to the new next_id
+    cursor.execute("UPDATE id_tracker SET last_id = ?", (next_id,))
+    conn.commit()  # Commit the transaction to save the changes
 
     conn.close()
     return new_id
+
 
 
 # Function to add a new PEZ to the database
@@ -34,12 +44,23 @@ def add_pez(id, full_name, series, pup_name, year_of_manufacture, country_of_man
             image):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('''
-    INSERT INTO pez_collection (id, full_name, series, pup_name, year_of_manufacture, country_of_manufacture, patent, leg, leg_color, image)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (id, full_name, series, pup_name, year_of_manufacture, country_of_manufacture, patent, leg, leg_color, image))
-    conn.commit()
-    conn.close()
+    try:
+        # Insert the new PEZ item
+        cursor.execute('''
+            INSERT INTO pez_collection (id, full_name, series, pup_name, year_of_manufacture, country_of_manufacture, patent, leg, leg_color, image)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+        id, full_name, series, pup_name, year_of_manufacture, country_of_manufacture, patent, leg, leg_color, image))
+
+        # Update the last used ID in the id_tracker table
+        last_id = int(id.replace("PEZ", ""))  # Extract the numeric part of the ID
+        cursor.execute("UPDATE id_tracker SET last_id = ?", (last_id,))
+
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"An error occurred: {e}")
+    finally:
+        conn.close()
 
 
 # Function to fetch unique series from the database
@@ -90,8 +111,8 @@ def add_pez_page():
     st.title("Add a New PEZ")
 
     # Generate the next ID automatically
-    pez_id = generate_next_id()
-    st.write(f"Generated PEZ ID: {pez_id}")
+    # pez_id = generate_next_id()
+    # st.write(f"Generated PEZ ID: {pez_id}")
 
     # Initialize session state variables for form input fields
     if 'full_name' not in st.session_state:
@@ -160,6 +181,7 @@ def add_pez_page():
     # Button to add PEZ to the database
     if st.button("Add PEZ"):
         if st.session_state.full_name and st.session_state.pup_name and st.session_state.series:  # Ensure mandatory fields are filled
+            pez_id = generate_next_id()
             add_pez(pez_id, st.session_state.full_name, st.session_state.series, st.session_state.pup_name,
                     st.session_state.year_of_manufacture, st.session_state.country_of_manufacture,
                     st.session_state.patent, st.session_state.leg, st.session_state.leg_color, image)

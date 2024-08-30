@@ -121,6 +121,9 @@ def image_to_base64(img_data, max_width=150):
     img_base64 = base64.b64encode(buffered.getvalue()).decode()
     return f'<img src="data:image/png;base64,{img_base64}" style="width:{new_width}px;height:auto;"/>'
 
+
+
+
 # Function to prepare DataFrame from PEZ items
 def prepare_pez_dataframe(pez_items, is_admin):
     data = []
@@ -131,22 +134,21 @@ def prepare_pez_dataframe(pez_items, is_admin):
             img_html = "No image available."
 
         # Include delete button only if user is admin
-        delete_button_html = ''
         if is_admin:
             delete_button_html = f'<form action="" method="get"><input type="hidden" name="delete_id" value="{item["id"]}"/><input type="submit" value="X" style="color: red; cursor: pointer;"/></form>'
 
             data.append({
-                "Image": img_html,
-                "Full Name": item['full_name'],
-                "Series": item['series'],
-                "Pup Name": item['pup_name'],
-                "Year of Manufacture": item['year_of_manufacture'],
-                "Country of Manufacture": item['country_of_manufacture'],
-                "Patent": item['patent'],
-                "Leg": item['leg'],
-                "Leg Color": item['leg_color'] if item['leg'] in ["with", "thin"] else "--",
-                "Delete": delete_button_html  # Add delete button HTML directly
-            })
+                    "Image": img_html,
+                    "Full Name": item['full_name'],
+                    "Series": item['series'],
+                    "Pup Name": item['pup_name'],
+                    "Year of Manufacture": item['year_of_manufacture'],
+                    "Country of Manufacture": item['country_of_manufacture'],
+                    "Patent": item['patent'],
+                    "Leg": item['leg'],
+                    "Leg Color": item['leg_color'] if item['leg'] in ["with", "thin"] else "--",
+                    "Delete": delete_button_html  # Add delete button HTML directly
+                })
         else:
             data.append({
                 "Image": img_html,
@@ -182,14 +184,18 @@ def display_pagination_controls(total_pages):
 def main_page():
     st.title("PEZ Collection")
 
+    # Preserve the 'is_admin' status
+    if 'is_admin' not in st.session_state:
+        st.session_state.is_admin = False  # Default to non-admin
+
     # Display the current user's role
-    if st.session_state.get('is_admin', False):
+    if st.session_state.is_admin:
         st.markdown("### **Status:** Admin")
     else:
         st.markdown("### **Status:** Viewer")
 
     # Admin-specific features
-    if st.session_state.get('is_admin', False):
+    if st.session_state.is_admin:
         st.subheader("Admin Features")
 
         # Button to navigate to the Add PEZ page
@@ -237,16 +243,6 @@ def main_page():
     pez_items = fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_color, start_idx,
                                          items_per_page)
 
-    query_params = st.query_params
-    if 'delete_id' in query_params:
-        state = copy(st.session_state)  # Step 1: Copy the session state to maintain it after rerun
-        delete_id = query_params['delete_id'][0]  # Retrieve the delete_id from query parameters
-        delete_pez_item(delete_id)  # Call the delete function
-        st.success(f"PEZ item with ID {delete_id} deleted successfully!")
-        st.query_params.clear()  # Clear the query parameters by setting them to an empty dictionary
-        st.session_state = state  # Step 2: Restore the session state after clearing query params
-        st.rerun()  # Refresh the page to update the list
-
 
     if pez_items:
         df = prepare_pez_dataframe(pez_items, st.session_state.get('is_admin', False))  # Pass admin status
@@ -257,6 +253,21 @@ def main_page():
         display_pagination_controls(total_pages)
     else:
         st.write("No PEZ items found in the collection.")
+
+    query_params = st.query_params
+    if 'delete_id' in query_params:
+        delete_id = query_params['delete_id']  # Retrieve the delete_id from query parameters
+        delete_pez_item(delete_id)  # Call the delete function
+        st.success(f"PEZ item with ID {delete_id} deleted successfully!")
+        # Clear the query parameters by setting them to an empty dictionary
+        st.query_params.clear()
+        st.rerun()  # Refresh the page to update the list
+
+if __name__ == "__main__":
+    main_page()
+
+if __name__ == "__main__":
+    main_page()
 
 if __name__ == "__main__":
     main_page()

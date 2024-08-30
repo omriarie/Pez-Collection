@@ -36,6 +36,7 @@ def login_page():
     # Button to navigate back to the main page
     if st.button("Back to Main Page"):
         st.session_state.current_page = "main"
+        st.query_params.clear()  # Clear query parameters before returning to main page
         st.rerun()
 
 if __name__ == "__main__":
