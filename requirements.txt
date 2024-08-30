@@ -1,5 +1,4 @@
 pandas
 streamlit
-copy
 PIL
 base64
