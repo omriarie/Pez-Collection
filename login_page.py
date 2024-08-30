@@ -29,14 +29,14 @@ def login_page():
                 st.success("Login successful! You have admin privileges.")
                 st.session_state.is_admin = True  # Set admin status in session state
                 st.session_state.current_page = "main"  # Redirect to main page
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Invalid username or password")
 
     # Button to navigate back to the main page
     if st.button("Back to Main Page"):
         st.session_state.current_page = "main"
-        st.experimental_rerun()
+        st.rerun()
 
 if __name__ == "__main__":
     login_page()

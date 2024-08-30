@@ -177,7 +177,7 @@ def add_pez_page():
     # Button to return to the main page
     if st.button("Back to Main Page"):
         st.session_state.current_page = "main"
-        st.experimental_rerun()
+        st.rerun()
 
 
 if __name__ == "__main__":
