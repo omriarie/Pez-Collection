@@ -1,3 +1,5 @@
+from copy import copy
+
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -6,6 +8,7 @@ import io
 import base64
 
 items_per_page = 10
+state = None
 
 # Function to connect to the SQLite database
 def get_db_connection():
@@ -22,8 +25,8 @@ def fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_
 
     # Adding filters to the query
     if full_name:
-        query += " AND full_name LIKE ?"
-        params.append(f"%{full_name}%")
+        query += " AND LOWER(full_name) LIKE ?"
+        params.append(f"%{full_name.lower()}%")  # Convert search term to lowercase and use wildcards for "contains"
     if series:
         query += " AND series = ?"
         params.append(series)
@@ -50,6 +53,7 @@ def fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_
     rows = cursor.fetchall()
     conn.close()
     return rows
+
 
 # Function to fetch distinct values for filters
 def fetch_distinct_values(column_name):
@@ -118,7 +122,7 @@ def image_to_base64(img_data, max_width=150):
     return f'<img src="data:image/png;base64,{img_base64}" style="width:{new_width}px;height:auto;"/>'
 
 # Function to prepare DataFrame from PEZ items
-def prepare_pez_dataframe(pez_items):
+def prepare_pez_dataframe(pez_items, is_admin):
     data = []
     for item in pez_items:
         if item['image']:
@@ -126,17 +130,36 @@ def prepare_pez_dataframe(pez_items):
         else:
             img_html = "No image available."
 
-        data.append({
-            "Image": img_html,
-            "Full Name": item['full_name'],
-            "Series": item['series'],
-            "Pup Name": item['pup_name'],
-            "Year of Manufacture": item['year_of_manufacture'],
-            "Country of Manufacture": item['country_of_manufacture'],
-            "Patent": item['patent'],
-            "Leg": item['leg'],
-            "Leg Color": item['leg_color'] if item['leg'] in ["with", "thin"] else "N/A"
-        })
+        # Include delete button only if user is admin
+        delete_button_html = ''
+        if is_admin:
+            delete_button_html = f'<form action="" method="get"><input type="hidden" name="delete_id" value="{item["id"]}"/><input type="submit" value="X" style="color: red; cursor: pointer;"/></form>'
+
+            data.append({
+                "Image": img_html,
+                "Full Name": item['full_name'],
+                "Series": item['series'],
+                "Pup Name": item['pup_name'],
+                "Year of Manufacture": item['year_of_manufacture'],
+                "Country of Manufacture": item['country_of_manufacture'],
+                "Patent": item['patent'],
+                "Leg": item['leg'],
+                "Leg Color": item['leg_color'] if item['leg'] in ["with", "thin"] else "--",
+                "Delete": delete_button_html  # Add delete button HTML directly
+            })
+        else:
+            data.append({
+                "Image": img_html,
+                "Full Name": item['full_name'],
+                "Series": item['series'],
+                "Pup Name": item['pup_name'],
+                "Year of Manufacture": item['year_of_manufacture'],
+                "Country of Manufacture": item['country_of_manufacture'],
+                "Patent": item['patent'],
+                "Leg": item['leg'],
+                "Leg Color": item['leg_color'] if item['leg'] in ["with", "thin"] else "--"
+            })
+
 
     df = pd.DataFrame(data)
     return df
@@ -147,18 +170,17 @@ def display_pagination_controls(total_pages):
     with col1:
         if st.button("Previous", disabled=st.session_state.current_page_main_number == 0):
             st.session_state.current_page_main_number -= 1
-            st.experimental_rerun()
+            st.rerun()
     with col2:
         st.write(f"Page {st.session_state.current_page_main_number + 1} of {total_pages}")
     with col3:
         if st.button("Next", disabled=(st.session_state.current_page_main_number + 1) >= total_pages):
             st.session_state.current_page_main_number += 1
-            st.experimental_rerun()
+            st.rerun()
 
 # Main page function to display all PEZ items in a table
 def main_page():
     st.title("PEZ Collection")
-
 
     # Display the current user's role
     if st.session_state.get('is_admin', False):
@@ -173,20 +195,20 @@ def main_page():
         # Button to navigate to the Add PEZ page
         if st.button("Add New PEZ"):
             st.session_state.current_page = "add_pez"
-            st.experimental_rerun()
+            st.rerun()
 
         # Logout button
         if st.button("Logout"):
             # Reset admin privileges and redirect to main page
             st.session_state.is_admin = False
-            st.experimental_rerun()
+            st.rerun()
     else:
         st.write("You are viewing as a guest.")
 
         # Add the login button for non-admin users
         if st.button("Login as Admin"):
             st.session_state.current_page = "login"
-            st.experimental_rerun()
+            st.rerun()
 
     # Initialize session state for pagination
     if 'current_page_main_number' not in st.session_state:
@@ -212,15 +234,26 @@ def main_page():
     start_idx = st.session_state.current_page_main_number * items_per_page
 
     # Fetch and prepare filtered PEZ items for display
-    pez_items = fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_color, start_idx, items_per_page)
+    pez_items = fetch_filtered_pez_items(full_name, series, year, country, patent, leg, leg_color, start_idx,
+                                         items_per_page)
+
+    query_params = st.query_params
+    if 'delete_id' in query_params:
+        state = copy(st.session_state)  # Step 1: Copy the session state to maintain it after rerun
+        delete_id = query_params['delete_id'][0]  # Retrieve the delete_id from query parameters
+        delete_pez_item(delete_id)  # Call the delete function
+        st.success(f"PEZ item with ID {delete_id} deleted successfully!")
+        st.query_params.clear()  # Clear the query parameters by setting them to an empty dictionary
+        st.session_state = state  # Step 2: Restore the session state after clearing query params
+        st.rerun()  # Refresh the page to update the list
+
+
     if pez_items:
-        df = prepare_pez_dataframe(pez_items)
+        df = prepare_pez_dataframe(pez_items, st.session_state.get('is_admin', False))  # Pass admin status
         df.index = df.index + 1 + (st.session_state.current_page_main_number * items_per_page)
 
         # Display DataFrame with images using st.markdown
         st.markdown(df.to_html(escape=False, index=True), unsafe_allow_html=True)
-
-        # Display pagination controls
         display_pagination_controls(total_pages)
     else:
         st.write("No PEZ items found in the collection.")
